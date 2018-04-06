@@ -1,4 +1,8 @@
-// scusiStore store module
+// scusiStore - a file storeage based on diskv.
+//
+// a scusiStore actualy consists of two diskv stores.
+// a blobstore for the actual file content and a metastore for file metadata,
+// such as filenames, size, checksum,...
 package store
 
 import (
@@ -10,6 +14,7 @@ import (
 	"path/filepath"
 )
 
+// Store - datastruct for a scusiStore Store
 type Store struct {
 	Name        string
 	Description string
@@ -18,7 +23,7 @@ type Store struct {
 	metastore   *diskv.Diskv
 }
 
-// create a new store that consists of an blobstore and a metastore
+// New - creates a new store that consists of an blobstore and a metastore
 func New(path string) (store *Store) {
 	name := filepath.Base(path)
 	store = &Store{
@@ -50,7 +55,7 @@ func newMetaStore(basePath string) (metaStore *diskv.Diskv) {
 	return
 }
 
-// add a file to the store
+// AddFile - add a file to the storedd
 func (s *Store) AddFile(filename string, data []byte) (fileID string, err error) {
 	filename = filepath.Base(filename)
 	m := GenMeta(filename, data)
@@ -69,6 +74,7 @@ func (s *Store) AddFile(filename string, data []byte) (fileID string, err error)
 	return m.ID, err
 }
 
+// GetMeta - retrieves just the metadata for a given file from store.
 func (s *Store) GetMeta(fileID string) (meta Metadata, err error) {
 	metaJSON, err := s.metastore.Read(fileID)
 	if err != nil {
@@ -80,6 +86,8 @@ func (s *Store) GetMeta(fileID string) (meta Metadata, err error) {
 	}
 	return
 }
+
+// GetFile - retrives a file and its metadata from store
 func (s *Store) GetFile(fileID string) (meta Metadata, blob []byte, err error) {
 	blob, err = s.blobstore.Read(fileID)
 	if err != nil {
@@ -96,6 +104,7 @@ func (s *Store) GetFile(fileID string) (meta Metadata, blob []byte, err error) {
 	return
 }
 
+// RemoveFile - removes a file and its metadata from store
 func (s *Store) RemoveFile(fileID string) (err error) {
 	err = s.blobstore.Erase(fileID)
 	if err != nil {
@@ -108,6 +117,7 @@ func (s *Store) RemoveFile(fileID string) (err error) {
 	return
 }
 
+// List - lists all metadata for all files in store
 func (s *Store) List() (metaList []Metadata, err error) {
 	d := s.metastore
 	closingChan := make(chan struct{})
@@ -131,6 +141,8 @@ func (s *Store) List() (metaList []Metadata, err error) {
 	return
 }
 
+// GenBlake2b32 - genertes a blake2b 32 byte checksum over given data.
+// aka long ID
 func GenBlake2b32(data []byte) (c string) {
 	b := blake2b.New256()
 	b.Write(data)
@@ -138,6 +150,8 @@ func GenBlake2b32(data []byte) (c string) {
 	return fmt.Sprintf("%x", bsum)
 }
 
+// GenBlake2s4 - generates a blake2s 4 byte checksum over given data.
+// aka short ID
 func GenBlake2s4(data []byte) (c string, err error) {
 	hash, err := blake2s.New(&blake2s.Config{
 		Size:   4,
@@ -151,9 +165,9 @@ func GenBlake2s4(data []byte) (c string, err error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
-
 }
 
+// Metadata - datastruct for metadata of a given file
 type Metadata struct {
 	ID        string
 	Filenames []string
@@ -161,6 +175,7 @@ type Metadata struct {
 	Blake2b   string
 }
 
+// GenMeta - function to generate metadata for given bytes
 func GenMeta(filename string, data []byte) (metaData *Metadata) {
 	fileID, _ := GenBlake2s4(data)
 	if fileID == "" {
@@ -173,11 +188,11 @@ func GenMeta(filename string, data []byte) (metaData *Metadata) {
 	return metaData
 }
 
+// Marshal - marshals metadata from JSON to datastruct.
 func Marshal(m Metadata) (jsonBytes []byte, err error) {
 	jsonBytes, err = json.Marshal(m)
 	if err != nil {
 		return
 	}
 	return
-
 }
