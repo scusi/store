@@ -177,14 +177,20 @@ type Metadata struct {
 
 // GenMeta - function to generate metadata for given bytes
 func GenMeta(filename string, data []byte) (metaData *Metadata) {
-	fileID, _ := GenBlake2s4(data)
-	if fileID == "" {
+	var blake2b32Available bool
+	fileID, err := GenBlake2s4(data)
+	if err != nil {
 		fileID = GenBlake2b32(data)
+		blake2b32Available = true
 	}
 	metaData = &Metadata{ID: fileID}
 	metaData.Filenames = append(metaData.Filenames, filename)
 	metaData.Size = int64(len(data))
-	metaData.Blake2b = GenBlake2b32(data)
+	if blake2b32Available == true {
+		metaData.Blake2b = fileID
+	} else {
+		metaData.Blake2b = GenBlake2b32(data)
+	}
 	return metaData
 }
 
