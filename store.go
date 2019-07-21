@@ -12,6 +12,7 @@ import (
 	"github.com/dchest/blake2s"
 	"github.com/peterbourgon/diskv"
 	"path/filepath"
+	"io"
 )
 
 // Store - datastruct for a scusiStore Store
@@ -104,6 +105,15 @@ func (s *Store) GetFile(fileID string) (meta Metadata, blob []byte, err error) {
 	return
 }
 
+// GetFileReader - retrieves a reader for a given file
+func (s *Store) GetFileReader(fileID string) (reader io.ReadCloser, err error) {
+		reader, err = s.blobstore.ReadStream(fileID, true)
+		if err != nil {
+			return
+		}
+		return
+}
+
 // RemoveFile - removes a file and its metadata from store
 func (s *Store) RemoveFile(fileID string) (err error) {
 	err = s.blobstore.Erase(fileID)
@@ -173,6 +183,32 @@ type Metadata struct {
 	Filenames []string
 	Size      int64
 	Blake2b   string
+	Custom    interface{}
+}
+
+func (s *Store) SetCustom(fileID string, custom interface{}) (err error) {
+	meta, err := s.GetMeta(fileID)
+	if err != nil {
+		return
+	}
+	meta.Custom = custom
+	j, err := Marshal(meta)
+	if err != nil {
+		return
+	}
+	err = s.metastore.Write(meta.ID, j)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (s *Store) GetCustom(fileID string) (custom interface{}, err error) {
+	meta, err := s.GetMeta(fileID)
+	if err != nil {
+		return
+	}
+	return meta.Custom, nil
 }
 
 // GenMeta - function to generate metadata for given bytes
