@@ -11,8 +11,10 @@ import (
 	"github.com/dchest/blake2b"
 	"github.com/dchest/blake2s"
 	"github.com/peterbourgon/diskv"
-	"path/filepath"
 	"io"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 // Store - datastruct for a scusiStore Store
@@ -107,11 +109,11 @@ func (s *Store) GetFile(fileID string) (meta Metadata, blob []byte, err error) {
 
 // GetFileReader - retrieves a reader for a given file
 func (s *Store) GetFileReader(fileID string) (reader io.ReadCloser, err error) {
-		reader, err = s.blobstore.ReadStream(fileID, true)
-		if err != nil {
-			return
-		}
+	reader, err = s.blobstore.ReadStream(fileID, true)
+	if err != nil {
 		return
+	}
+	return
 }
 
 // RemoveFile - removes a file and its metadata from store
@@ -124,6 +126,19 @@ func (s *Store) RemoveFile(fileID string) (err error) {
 	if err != nil {
 		return
 	}
+	return
+}
+
+// TouchFile - touches the metadata of a file in store
+// With a touch the last accessed time is changed.
+// In Systems that use this timestamp to determine when
+// a file in store times out it will effectifly lead
+// to longer storage periods for that file.
+func (s *Store) Touch(fileID string) (err error) {
+	filePath := filepath.Join(s.metastore.BasePath, fileID)
+	//filePath := filepath.Join(dataDir, "metastore", fileID)
+	now := time.Now()
+	err = os.Chtimes(filePath, now, now)
 	return
 }
 
@@ -179,11 +194,11 @@ func GenBlake2s4(data []byte) (c string, err error) {
 
 // Metadata - datastruct for metadata of a given file
 type Metadata struct {
-	ID        string
-	Filenames []string
-	Size      int64
-	Blake2b   string
-	Custom    interface{}
+	ID        string      // ID holds a unique ID for that file
+	Filenames []string    // Filenames, a list of filenames for that file, the first filename is used by default
+	Size      int64       // Size of the file in bytes
+	Blake2b   string      // 32 byte blake2b checksum of the file content
+	Custom    interface{} // a custom interface for custom fields
 }
 
 func (s *Store) SetCustom(fileID string, custom interface{}) (err error) {
