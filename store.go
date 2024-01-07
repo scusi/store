@@ -58,7 +58,11 @@ func newMetaStore(basePath string) (metaStore *diskv.Diskv) {
 	return
 }
 
-// AddFile - add a file to the storedd
+// AddFile - add a file to the store
+//
+// NOTE: this function is only suiteable for relative small files, since it
+//       reads the whole file into memory.
+//       User WriteStream for large files instead
 func (s *Store) AddFile(filename string, data []byte) (fileID string, err error) {
 	filename = filepath.Base(filename)
 	m := GenMeta(filename, data)
@@ -71,6 +75,25 @@ func (s *Store) AddFile(filename string, data []byte) (fileID string, err error)
 		return
 	}
 	err = s.blobstore.Write(m.ID, data)
+	if err != nil {
+		return
+	}
+	return m.ID, err
+}
+
+// WriteStream - like AddFile but for large files
+func (s *Store) WriteStream(filename string, r io.Reader, sync bool) (fileID string, err error) {
+	filename = filepath.Base(filename)
+	m := GenMetaStream(filename, r)
+	j, err := Marshal(*m)
+	if err != nil {
+		return
+	}
+	err = s.metastore.Write(m.ID, j)
+	if err != nil {
+		return
+	}
+	err = s.blobstore.WriteStream(m.ID, r, true)
 	if err != nil {
 		return
 	}
@@ -91,6 +114,11 @@ func (s *Store) GetMeta(fileID string) (meta Metadata, err error) {
 }
 
 // GetFile - retrives a file and its metadata from store
+//
+// NOTE: this function is only suiteable for relative small files, since it
+//       reads the whole file into memory.
+// 	 Use GetFileReader for large files!
+//
 func (s *Store) GetFile(fileID string) (meta Metadata, blob []byte, err error) {
 	blob, err = s.blobstore.Read(fileID)
 	if err != nil {
@@ -175,6 +203,14 @@ func GenBlake2b32(data []byte) (c string) {
 	return fmt.Sprintf("%x", bsum)
 }
 
+func GenBlake2b32Reader(r io.Reader) (c string, err error) {
+	b := blake2b.New256()
+	if _, err := io.Copy(b, r); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b.Sum(nil)), nil
+}
+
 // GenBlake2s4 - generates a blake2s 4 byte checksum over given data.
 // aka short ID
 func GenBlake2s4(data []byte) (c string, err error) {
@@ -187,6 +223,23 @@ func GenBlake2s4(data []byte) (c string, err error) {
 	}
 	_, err = hash.Write(data)
 	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// GenBlake2s4Reader - generates a blake2s 4 byte checksum over given data.
+// aka short ID
+func GenBlake2s4Reader(r io.Reader) (c string, err error) {
+	hash, err := blake2s.New(&blake2s.Config{
+		Size:   4,
+		Person: []byte("scusi.v1"),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := io.Copy(hash, r); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
@@ -241,6 +294,26 @@ func GenMeta(filename string, data []byte) (metaData *Metadata) {
 		metaData.Blake2b = fileID
 	} else {
 		metaData.Blake2b = GenBlake2b32(data)
+	}
+	return metaData
+}
+
+// GenMetaStream - function to generate metadata for given stream of bytes
+func GenMetaStream(filename string, r io.Reader) (metaData *Metadata) {
+	var blake2b32Available bool
+	fileID, err := GenBlake2s4Reader(r)
+	if err != nil {
+		fileID, _ = GenBlake2b32Reader(r)
+		blake2b32Available = true
+	}
+	metaData = &Metadata{ID: fileID}
+	metaData.Filenames = append(metaData.Filenames, filename)
+	size, err := io.Copy(io.Discard, r)
+	metaData.Size = size
+	if blake2b32Available == true {
+		metaData.Blake2b = fileID
+	} else {
+		metaData.Blake2b, _ = GenBlake2b32Reader(r)
 	}
 	return metaData
 }
