@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	//"log"
 )
 
 // Store - datastruct for a scusiStore Store
@@ -84,7 +85,10 @@ func (s *Store) AddFile(filename string, data []byte) (fileID string, err error)
 // WriteStream - like AddFile but for large files
 func (s *Store) WriteStream(filename string, r io.Reader, sync bool) (fileID string, err error) {
 	filename = filepath.Base(filename)
-	m := GenMetaStream(filename, r)
+	m, r, err := GenMetaStream(filename, r)
+	if err != nil {
+		return
+	}
 	j, err := Marshal(*m)
 	if err != nil {
 		return
@@ -299,23 +303,33 @@ func GenMeta(filename string, data []byte) (metaData *Metadata) {
 }
 
 // GenMetaStream - function to generate metadata for given stream of bytes
-func GenMetaStream(filename string, r io.Reader) (metaData *Metadata) {
-	var blake2b32Available bool
-	fileID, err := GenBlake2s4Reader(r)
+func GenMetaStream(filename string, r io.Reader) (metaData *Metadata, nr io.Reader, err error) {
+	// gen a reader for blake2s
+	b2s, err := blake2s.New(&blake2s.Config{
+		Size:   4,
+		Person: []byte("scusi.v1"),
+	})
 	if err != nil {
-		fileID, _ = GenBlake2b32Reader(r)
-		blake2b32Available = true
+		return metaData, r, err
 	}
-	metaData = &Metadata{ID: fileID}
+	// gen a reader for blake2b-256
+	b2b := blake2b.New256()
+	// gen a reader for size
+	sizeReader := io.Discard
+	// create a MultiWriter
+	mw := io.MultiWriter(b2s, b2b, sizeReader)
+	// copy input reader to multiWriter 
+	r = io.TeeReader(r, mw)
+	size, err := io.Copy(mw, r)
+	if err != nil {
+		return metaData, r, err
+	}
+	metaData = &Metadata{ID: fmt.Sprintf("%x", b2s.Sum(nil))}
 	metaData.Filenames = append(metaData.Filenames, filename)
-	size, err := io.Copy(io.Discard, r)
 	metaData.Size = size
-	if blake2b32Available == true {
-		metaData.Blake2b = fileID
-	} else {
-		metaData.Blake2b, _ = GenBlake2b32Reader(r)
-	}
-	return metaData
+	metaData.Blake2b = fmt.Sprintf("%x", b2b.Sum(nil))
+
+	return metaData, r, err
 }
 
 // Marshal - marshals metadata from JSON to datastruct.
