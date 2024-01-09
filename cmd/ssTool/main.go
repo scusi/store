@@ -10,7 +10,7 @@ import (
 
 func main() {
 	fileName := os.Args[1]
-	ns := store.New("/home/analyzr/.scusiStore")
+	ns := store.New("/home/flow/.scusiStore")
 	fmt.Printf("%#v\n", ns)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
