@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/scusi/scusiStore"
+	"github.com/scusi/store"
 	"io/ioutil"
 	"os"
 )

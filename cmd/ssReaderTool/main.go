@@ -4,7 +4,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/scusi/scusiStore"
+	"github.com/scusi/store"
 	"os"
 )
 
