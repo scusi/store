@@ -1,4 +1,4 @@
-module github.com/scusi/store
+module github.com/scusi/store/v2
 
 go 1.21.6
 
